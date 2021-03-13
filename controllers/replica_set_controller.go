@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util/functions"
 
@@ -121,7 +122,6 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		// Error reading the object - requeue the request.
 		return result.Failed()
 	}
-
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
 
@@ -254,7 +254,8 @@ func (r *ReplicaSetReconciler) deployStatefulSet(mdb mdbv1.MongoDBCommunity) (bo
 	if err := r.createOrUpdateStatefulSet(mdb); err != nil {
 		return false, errors.Errorf("error creating/updating StatefulSet: %s", err)
 	}
-
+	r.log.Info("Waiting 1 second for statefulset creating...")
+	time.Sleep(1 * time.Second)
 	currentSts, err := r.client.GetStatefulSet(mdb.NamespacedName())
 	if err != nil {
 		return false, errors.Errorf("error getting StatefulSet: %s", err)
