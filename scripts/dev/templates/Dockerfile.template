@@ -13,7 +13,7 @@ ENV GOPATH ""
 
 WORKDIR /workspace
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download -x
 
 {% for file in files_to_add %}
 ADD {{file}} {{file}}
