@@ -3,7 +3,6 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
 	"strings"
 
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/authentication/scram"
@@ -73,13 +72,6 @@ type MongoDBCommunitySpec struct {
 
 	// +optional
 	StatefulSetConfiguration StatefulSetConfiguration `json:"statefulSet,omitempty"`
-
-	// Resources describes the compute resource requirements
-	Resources corev1.ResourceRequirements `json:"resources"`
-
-	Volumes []corev1.Volume `json:"volumes,omitempty"`
-
-	VolumeClaimTemplates []corev1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty"`
 
 	// AdditionalMongodConfig is additional configuration that can be passed to
 	// each data-bearing mongod at runtime. Uses the same structure as the mongod
@@ -499,10 +491,6 @@ func (m MongoDBCommunity) GetMongoDBVersion() string {
 
 func (m *MongoDBCommunity) StatefulSetReplicasThisReconciliation() int {
 	return scale.ReplicasThisReconciliation(m)
-}
-
-func (m *MongoDBCommunity) GetResources() corev1.ResourceRequirements {
-	return m.Spec.Resources
 }
 
 type automationConfigReplicasScaler struct {

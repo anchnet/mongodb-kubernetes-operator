@@ -21,6 +21,13 @@ spec:
         - name: userAdminAnyDatabase
           db: admin
       scramCredentialsSecretName: my-scram
+  resources:
+    requests:
+      memory: "1024Mi"
+      cpu: "250m"
+    limits:
+      memory: "2048Mi"
+      cpu: "300m"
   statefulSet:
     spec:
       template:
@@ -31,19 +38,19 @@ spec:
             - name: mongod
               resources:
                 limits:
-                  cpu: "0.2"
+                  cpu: "0.5"
                   memory: 250M
                 requests:
-                  cpu: "0.2"
-                  memory: 200M
+                  cpu: "0.4"
+                  memory: 240M
             - name: mongodb-agent
               resources:
                 limits:
-                  cpu: "0.2"
-                  memory: 250M
+                  cpu: "0.3"
+                  memory: 230M
                 requests:
                   cpu: "0.2"
-                  memory: 200M
+                  memory: 220M
   additionalMongodConfig: {}
 # the user credentials will be generated from this secret
 # once the credentials are generated, this secret is no longer required
@@ -54,4 +61,4 @@ metadata:
   name: my-user-password
 type: Opaque
 stringData:
-  password: <your-password-here>
+  password: admin

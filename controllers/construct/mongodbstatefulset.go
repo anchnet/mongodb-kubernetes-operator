@@ -52,7 +52,6 @@ type MongoDBStatefulSetOwner interface {
 	GetMongoDBVersion() string
 	AutomationConfigSecretName() string
 	GetAgentKeyfileSecretNamespacedName() types.NamespacedName
-	GetResources() corev1.ResourceRequirements
 }
 
 // BuildMongoDBReplicaSetStatefulSetModificationFunction builds the parts of the replica set that are common between every resource that implements
@@ -89,6 +88,7 @@ func BuildMongoDBReplicaSetStatefulSetModificationFunction(mdb MongoDBStatefulSe
 	keyFileVolume := statefulset.CreateVolumeFromSecret(keyFileNsName.Name, keyFileNsName.Name, statefulset.WithSecretDefaultMode(&mode))
 	keyFileVolumeVolumeMount := statefulset.CreateVolumeMount(keyFileVolume.Name, "/var/lib/mongodb-mms-automation/authentication", statefulset.WithReadOnly(false))
 	keyFileVolumeVolumeMountMongod := statefulset.CreateVolumeMount(keyFileVolume.Name, "/var/lib/mongodb-mms-automation/authentication", statefulset.WithReadOnly(false))
+
 	return statefulset.Apply(
 		statefulset.WithName(mdb.GetName()),
 		statefulset.WithNamespace(mdb.GetNamespace()),
@@ -107,21 +107,8 @@ func BuildMongoDBReplicaSetStatefulSetModificationFunction(mdb MongoDBStatefulSe
 				podtemplatespec.WithVolume(scriptsVolume),
 				podtemplatespec.WithVolume(keyFileVolume),
 				podtemplatespec.WithServiceAccount(operatorServiceAccountName),
-				podtemplatespec.WithContainer(AgentName, mongodbAgentContainer(mdb.AutomationConfigSecretName(),
-					[]corev1.VolumeMount{
-						agentHealthStatusVolumeMount,
-						automationConfigVolumeMount,
-						dataVolumeMount,
-						scriptsVolumeMount,
-						logVolumeMount,
-						keyFileVolumeVolumeMount})),
-				podtemplatespec.WithContainer(MongodbName, mongodbContainer(mdb.GetMongoDBVersion(),
-					[]corev1.VolumeMount{
-						mongodHealthStatusVolumeMount,
-						dataVolumeMount,
-						hooksVolumeMount,
-						logVolumeMount,
-						keyFileVolumeVolumeMountMongod}, mdb.GetResources())),
+				podtemplatespec.WithContainer(AgentName, mongodbAgentContainer(mdb.AutomationConfigSecretName(), []corev1.VolumeMount{agentHealthStatusVolumeMount, automationConfigVolumeMount, dataVolumeMount, scriptsVolumeMount, logVolumeMount, keyFileVolumeVolumeMount})),
+				podtemplatespec.WithContainer(MongodbName, mongodbContainer(mdb.GetMongoDBVersion(), []corev1.VolumeMount{mongodHealthStatusVolumeMount, dataVolumeMount, hooksVolumeMount, logVolumeMount, keyFileVolumeVolumeMountMongod})),
 				podtemplatespec.WithInitContainer(versionUpgradeHookName, versionUpgradeHookInit([]corev1.VolumeMount{hooksVolumeMount})),
 				podtemplatespec.WithInitContainer(readinessProbeContainerName, readinessProbeInit([]corev1.VolumeMount{scriptsVolumeMount})),
 			),
@@ -227,7 +214,7 @@ func getMongoDBImage(version string) string {
 	return fmt.Sprintf("%s/%s:%s", repoUrl, mongoImageName, version)
 }
 
-func mongodbContainer(version string, volumeMounts []corev1.VolumeMount, resource corev1.ResourceRequirements) container.Modification {
+func mongodbContainer(version string, volumeMounts []corev1.VolumeMount) container.Modification {
 	mongoDbCommand := []string{
 		"/bin/sh",
 		"-c",
@@ -246,7 +233,7 @@ exec mongod -f /data/automation-mongod.conf ;
 	return container.Apply(
 		container.WithName(MongodbName),
 		container.WithImage(getMongoDBImage(version)),
-		container.WithResourceRequirements(resource),
+		container.WithResourceRequirements(resourcerequirements.Defaults()),
 		container.WithCommand(mongoDbCommand),
 		container.WithEnvs(
 			corev1.EnvVar{
