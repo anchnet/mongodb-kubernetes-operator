@@ -147,6 +147,15 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 					IP:       pod.Status.PodIP,
 					PodName:  pod.ObjectMeta.Name,
 					NodeName: pod.Spec.NodeName,
+					Port:     mdbv1.DefaultMongoDBPort,
+				}
+				for _, container := range pod.Spec.Containers {
+					r.log.Info("Container: ", container.Ports)
+					if container.Name == "mongod" {
+						for _, port := range container.Ports {
+							node.Port = port.ContainerPort
+						}
+					}
 				}
 				nodes = append(nodes, node)
 			}

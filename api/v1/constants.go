@@ -14,3 +14,8 @@ const (
 	ClusterStatusOK ClusterStatus = "Healthy"
 	ClusterStatusKO ClusterStatus = "Failed"
 )
+const (
+	DefaultMongoDBPort   = 27017
+	MongoDBRolePRIMARY   = "primary"
+	MongoDBRoleSECONDARY = "secondary"
+)

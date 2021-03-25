@@ -43,6 +43,8 @@ spec:
                 requests:
                   cpu: "0.4"
                   memory: 240M
+              ports:
+              - containerPort: 27017
             - name: mongodb-agent
               resources:
                 limits:
