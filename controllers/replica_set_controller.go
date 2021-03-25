@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util"
 	"os"
 	"time"
 
@@ -70,10 +71,11 @@ func NewReconciler(mgr manager.Manager) *ReplicaSetReconciler {
 	secretWatcher := watch.New()
 
 	return &ReplicaSetReconciler{
-		client:        kubernetesClient.NewClient(mgrClient),
-		scheme:        mgr.GetScheme(),
-		log:           zap.S(),
-		secretWatcher: &secretWatcher,
+		client:                kubernetesClient.NewClient(mgrClient),
+		scheme:                mgr.GetScheme(),
+		log:                   zap.S(),
+		secretWatcher:         &secretWatcher,
+		statefulSetController: util.NewStatefulSetController(mgrClient),
 	}
 }
 
@@ -88,10 +90,11 @@ func (r *ReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type ReplicaSetReconciler struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        kubernetesClient.Client
-	scheme        *runtime.Scheme
-	log           *zap.SugaredLogger
-	secretWatcher *watch.ResourceWatcher
+	client                kubernetesClient.Client
+	scheme                *runtime.Scheme
+	log                   *zap.SugaredLogger
+	secretWatcher         *watch.ResourceWatcher
+	statefulSetController util.IStatefulSetControl
 }
 
 // +kubebuilder:rbac:groups=mongodbcommunity.mongodb.com,resources=mongodbcommunity,verbs=get;list;watch;create;update;patch;delete
@@ -107,6 +110,7 @@ type ReplicaSetReconciler struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 
+	defer r.log.Info("\n\n")
 	// TODO: generalize preparation for resource
 	// Fetch the MongoDB instance
 	mdb := mdbv1.MongoDBCommunity{}
@@ -124,6 +128,32 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
+
+	var nodes []mdbv1.MongoDBCommunityNode
+	//nodes = append(nodes, mdbv1.MongoDBCommunityNode{IP: "10.224.3.3.4", PodName: "example-mongodb-0"})
+	labels := map[string]string{
+		"app": fmt.Sprintf("%v-svc", mdb.Name),
+	}
+	pods, err := r.statefulSetController.GetStatefulSetPodsByLabels(request.Namespace, labels)
+	if pods != nil && len(pods.Items) > 0 {
+		r.log.Infow("Found", "labels:", mdb.Name, "ns:", request.Namespace, "pods:", len(pods.Items))
+		var podSlice []*corev1.Pod
+		for _, pod := range pods.Items {
+			if pod.Status.Phase == corev1.PodRunning {
+				podPointer := pod
+				podSlice = append(podSlice, &podPointer)
+				node := mdbv1.MongoDBCommunityNode{
+					ID:       string(pod.UID),
+					IP:       pod.Status.PodIP,
+					PodName:  pod.ObjectMeta.Name,
+					NodeName: pod.Spec.NodeName,
+				}
+				nodes = append(nodes, node)
+			}
+		}
+	}
+
+	res, err := status.Update(r.client.Status(), &mdb, statusOptions().withNode(nodes))
 
 	r.log.Debug("Validating MongoDB.Spec")
 	if err := r.validateUpdate(mdb); err != nil {
@@ -169,6 +199,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	ready, err := r.deployMongoDBReplicaSet(mdb)
+	r.log.Info("Deploy mongodb ready: ", ready)
 	if err != nil {
 		return status.Update(r.client.Status(), &mdb,
 			statusOptions().
@@ -204,7 +235,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		)
 	}
 
-	res, err := status.Update(r.client.Status(), &mdb,
+	res, err = status.Update(r.client.Status(), &mdb,
 		statusOptions().
 			withMongoURI(mdb.MongoURI()).
 			withMongoDBMembers(mdb.AutomationConfigMembersThisReconciliation()).
@@ -212,6 +243,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 			withMessage(None, "").
 			withRunningPhase(),
 	)
+
 	if err != nil {
 		r.log.Errorf("Error updating the status of the MongoDB resource: %s", err)
 		return res, err
@@ -225,7 +257,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		r.log.Infow("Requeuing reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 		return res, nil
 	}
-
+	r.log.Info("\n\nbuilding nodes................\n\n")
 	r.log.Infow("Successfully finished reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 	return res, err
 }

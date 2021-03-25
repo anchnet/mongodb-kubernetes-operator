@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	v1 "k8s.io/api/core/v1"
 	"strings"
 
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/authentication/scram"
@@ -46,7 +47,9 @@ type MongoDBCommunitySpec struct {
 	// +kubebuilder:validation:Enum=ReplicaSet
 	Type Type `json:"type"`
 	// Version defines which version of MongoDB will be used
-	Version string `json:"version"`
+	Version         string        `json:"version"`
+	Image           string        `json:"image,omitempty"`
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// FeatureCompatibilityVersion configures the feature compatibility version that will
 	// be set for the deployment
@@ -333,13 +336,24 @@ type AuthMode string
 
 // MongoDBCommunityStatus defines the observed state of MongoDB
 type MongoDBCommunityStatus struct {
-	MongoURI string `json:"mongoUri"`
-	Phase    Phase  `json:"phase"`
+	Status   ClusterStatus `json:"status"`
+	MongoURI string        `json:"mongoUri"`
+	Phase    Phase         `json:"phase"`
 
 	CurrentStatefulSetReplicas int `json:"currentStatefulSetReplicas"`
 	CurrentMongoDBMembers      int `json:"currentMongoDBMembers"`
 
-	Message string `json:"message,omitempty"`
+	Nodes   []MongoDBCommunityNode `json:"nodes,omitempty"`
+	Message string                 `json:"message,omitempty"`
+}
+
+type MongoDBCommunityNode struct {
+	ID       string               `json:"id,omitempty"`
+	Role     MongoDBCommunityRole `json:"role,omitempty"`
+	IP       string               `json:"ip,omitempty"`
+	Port     int32                `json:"port,omitempty"`
+	PodName  string               `json:"podName,omitempty"`
+	NodeName string               `json:"nodeName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
