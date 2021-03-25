@@ -16,7 +16,7 @@ spec:
       serviceAccountName: mongodb-kubernetes-operator
       containers:
         - name: mongodb-kubernetes-operator
-          image: quay.io/mongodb/mongodb-kubernetes-operator:0.5.1
+          image: hub.51idc.com/operators/mongodb-kubernetes-operator:0.5.2-migu-prerelease
           command:
             - /usr/local/bin/entrypoint
           imagePullPolicy: Always
