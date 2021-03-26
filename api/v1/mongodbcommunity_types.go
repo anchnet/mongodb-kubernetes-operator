@@ -348,12 +348,13 @@ type MongoDBCommunityStatus struct {
 }
 
 type MongoDBCommunityNode struct {
-	ID       string               `json:"id,omitempty"`
-	Role     MongoDBCommunityRole `json:"role,omitempty"`
-	IP       string               `json:"ip,omitempty"`
-	Port     int32                `json:"port,omitempty"`
-	PodName  string               `json:"podName,omitempty"`
-	NodeName string               `json:"nodeName,omitempty"`
+	ID        string               `json:"id,omitempty"`
+	Role      MongoDBCommunityRole `json:"role,omitempty"`
+	IP        string               `json:"ip,omitempty"`
+	Port      int32                `json:"port,omitempty"`
+	PodName   string               `json:"podName,omitempty"`
+	PodStatus string               `json:"podStatus"`
+	NodeName  string               `json:"nodeName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

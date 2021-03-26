@@ -141,49 +141,48 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		r.log.Infow("Found", "labels:", mdb.Name, "ns:", request.Namespace, "pods:", len(pods.Items))
 		var podSlice []*corev1.Pod
 		for _, pod := range pods.Items {
-			if pod.Status.Phase == corev1.PodRunning {
-				r.log.Info("Pod Running -----------")
-				podPointer := pod
-				podSlice = append(podSlice, &podPointer)
-				node := mdbv1.MongoDBCommunityNode{
-					ID:       string(pod.UID),
-					IP:       pod.Status.PodIP,
-					PodName:  pod.ObjectMeta.Name,
-					NodeName: pod.Spec.NodeName,
-					Port:     mdbv1.DefaultMongoDBPort,
-				}
-				for _, container := range pod.Spec.Containers {
-					r.log.Info("Container: ", container.Ports)
-					if container.Name == "mongod" {
-						for _, port := range container.Ports {
-							node.Port = port.ContainerPort
-						}
+			r.log.Info("Pod Running -----------")
+			podPointer := pod
+			podSlice = append(podSlice, &podPointer)
+			node := mdbv1.MongoDBCommunityNode{
+				ID:        string(pod.UID),
+				IP:        pod.Status.PodIP,
+				PodName:   pod.ObjectMeta.Name,
+				NodeName:  pod.Spec.NodeName,
+				Port:      mdbv1.DefaultMongoDBPort,
+				PodStatus: string(pod.Status.Phase),
+			}
+			for _, container := range pod.Spec.Containers {
+				r.log.Info("Container: ", container.Ports)
+				if container.Name == "mongod" {
+					for _, port := range container.Ports {
+						node.Port = port.ContainerPort
 					}
 				}
-				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
-				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
-				r.log.Info("Connecting ", mongoHost)
-				if err != nil {
-					r.log.Error("New mongodb client error,", err)
-					continue
-				}
-				response, err := client.RunCommand("isMaster")
-				if err != nil {
-					r.log.Error("Get mongodb node is master error,", err)
-					continue
-				}
-				err = client.Close()
-				if err != nil {
-					r.log.Error("Close mongodb client connection error,", err)
-					continue
-				}
-				if strings.HasPrefix(response["primary"].(string), pod.Name) {
-					node.Role = mdbv1.MongoDBClusterNodeRoleMaster
-				} else {
-					node.Role = mdbv1.MongoDBClusterNodeRoleSlave
-				}
-				nodes = append(nodes, node)
 			}
+			mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
+			client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
+			r.log.Info("Connecting ", mongoHost)
+			if err != nil {
+				r.log.Error("New mongodb client error,", err)
+				continue
+			}
+			response, err := client.RunCommand("isMaster")
+			if err != nil {
+				r.log.Error("Get mongodb node is master error,", err)
+				continue
+			}
+			err = client.Close()
+			if err != nil {
+				r.log.Error("Close mongodb client connection error,", err)
+				continue
+			}
+			if strings.HasPrefix(response["primary"].(string), pod.Name) {
+				node.Role = mdbv1.MongoDBClusterNodeRolePrimary
+			} else {
+				node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
+			}
+			nodes = append(nodes, node)
 		}
 	}
 

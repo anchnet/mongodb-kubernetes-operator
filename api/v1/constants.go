@@ -3,9 +3,9 @@ package v1
 type MongoDBCommunityRole string
 
 const (
-	MongoDBClusterNodeRoleMaster MongoDBCommunityRole = "Master"
-	MongoDBClusterNodeRoleSlave  MongoDBCommunityRole = "Slave"
-	MongoDBClusterNodeRoleNone   MongoDBCommunityRole = "None"
+	MongoDBClusterNodeRolePrimary   MongoDBCommunityRole = "Primary"
+	MongoDBClusterNodeRoleSecondary MongoDBCommunityRole = "Secondary"
+	MongoDBClusterNodeRoleNone      MongoDBCommunityRole = "None"
 )
 
 type ClusterStatus string
