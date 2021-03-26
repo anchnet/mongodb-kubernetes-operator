@@ -1,8 +1,9 @@
-import jinja2
 import argparse
 import os
 import sys
 from typing import List, Dict, Union
+
+import jinja2
 
 DockerParameters = Dict[str, Union[bool, str, List[str]]]
 
@@ -13,7 +14,7 @@ def operator_params(files_to_add: List[str]) -> DockerParameters:
     return {
         "builder": True,
         "builder_image": f"golang:{GOLANG_TAG}",
-        "base_image": "registry.access.redhat.com/ubi8/ubi-minimal:latest",
+        "base_image": "centos:7",
         "files_to_add": files_to_add,
     }
 

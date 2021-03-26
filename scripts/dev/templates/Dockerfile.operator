@@ -28,7 +28,7 @@ COPY --from=builder /workspace/build/bin /usr/local/bin
 
 RUN  /usr/local/bin/user_setup
 
-USER ${USER_UID}
+USER root
 {% endblock -%}
 
 {% block command -%}

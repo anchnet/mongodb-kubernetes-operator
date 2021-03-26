@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mongodb/mongodb-kubernetes-operator/pkg/mongo"
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util/functions"
@@ -140,6 +142,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		var podSlice []*corev1.Pod
 		for _, pod := range pods.Items {
 			if pod.Status.Phase == corev1.PodRunning {
+				r.log.Info("Pod Running -----------")
 				podPointer := pod
 				podSlice = append(podSlice, &podPointer)
 				node := mdbv1.MongoDBCommunityNode{
@@ -156,6 +159,28 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 							node.Port = port.ContainerPort
 						}
 					}
+				}
+				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
+				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
+				r.log.Info("Connecting ", mongoHost)
+				if err != nil {
+					r.log.Error("New mongodb client error,", err)
+					continue
+				}
+				response, err := client.RunCommand("isMaster")
+				if err != nil {
+					r.log.Error("Get mongodb node is master error,", err)
+					continue
+				}
+				err = client.Close()
+				if err != nil {
+					r.log.Error("Close mongodb client connection error,", err)
+					continue
+				}
+				if strings.HasPrefix(response["primary"].(string), pod.Name) {
+					node.Role = mdbv1.MongoDBClusterNodeRoleMaster
+				} else {
+					node.Role = mdbv1.MongoDBClusterNodeRoleSlave
 				}
 				nodes = append(nodes, node)
 			}
