@@ -34,7 +34,7 @@ func NewMongoClient(addr string) (IMongoClient, error) {
 func (m mongoClient) RunCommand(cmd string) (bson.M, error) {
 	var db *mongo.Database
 	db = m.client.Database("admin")
-	command := bson.D{{cmd, true}}
+	command := bson.E{"isMaster", true}
 	opts := options.RunCmd()
 	var result bson.M
 	if err := db.RunCommand(context.TODO(), command, opts).Decode(&result); err != nil {

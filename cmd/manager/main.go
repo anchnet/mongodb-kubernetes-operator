@@ -59,6 +59,7 @@ func main() {
 	// Get watch namespace from environment variable.
 	namespace, nsSpecified := os.LookupEnv("WATCH_NAMESPACE")
 	if !nsSpecified {
+		log.Info(fmt.Sprintf("Namespace specified: %v\n", nsSpecified))
 		os.Exit(1)
 	}
 

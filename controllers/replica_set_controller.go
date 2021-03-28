@@ -111,8 +111,7 @@ type ReplicaSetReconciler struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-
-	defer r.log.Info("\n\n")
+	defer r.log.Info("======================================================================")
 	// TODO: generalize preparation for resource
 	// Fetch the MongoDB instance
 	mdb := mdbv1.MongoDBCommunity{}
@@ -153,34 +152,35 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 				PodStatus: string(pod.Status.Phase),
 			}
 			for _, container := range pod.Spec.Containers {
-				r.log.Info("Container: ", container.Ports)
 				if container.Name == "mongod" {
 					for _, port := range container.Ports {
 						node.Port = port.ContainerPort
 					}
 				}
 			}
-			mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
-			client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
-			r.log.Info("Connecting ", mongoHost)
-			if err != nil {
-				r.log.Error("New mongodb client error,", err)
-				continue
-			}
-			response, err := client.RunCommand("isMaster")
-			if err != nil {
-				r.log.Error("Get mongodb node is master error,", err)
-				continue
-			}
-			err = client.Close()
-			if err != nil {
-				r.log.Error("Close mongodb client connection error,", err)
-				continue
-			}
-			if strings.HasPrefix(response["primary"].(string), pod.Name) {
-				node.Role = mdbv1.MongoDBClusterNodeRolePrimary
-			} else {
-				node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
+			if node.IP != "" {
+				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
+				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
+				if err != nil {
+					r.log.Error("New mongodb client error,", err)
+					continue
+				}
+				r.log.Infof("Run command \"%v\" on %v", mdbv1.MongoDBCommandIsMaster, mongoHost)
+				response, err := client.RunCommand(mdbv1.MongoDBCommandIsMaster)
+				if err != nil {
+					r.log.Infof("Run command error, %v", err)
+					continue
+				}
+				if strings.HasPrefix(response["primary"].(string), pod.Name) {
+					node.Role = mdbv1.MongoDBClusterNodeRolePrimary
+				} else {
+					node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
+				}
+				err = client.Close()
+				if err != nil {
+					r.log.Error("Close mongodb client connection error,", err)
+					continue
+				}
 			}
 			nodes = append(nodes, node)
 		}
@@ -242,11 +242,12 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if !ready {
-		return status.Update(r.client.Status(), &mdb,
+		res, err = status.Update(r.client.Status(), &mdb,
 			statusOptions().
 				withMessage(Info, "ReplicaSet is not yet ready, retrying in 10 seconds").
 				withPendingPhase(10),
 		)
+		return res, err
 	}
 
 	r.log.Debug("Resetting StatefulSet UpdateStrategy to RollingUpdate")
@@ -267,7 +268,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 			withPendingPhase(10),
 		)
 	}
-
+	r.log.Infof("status.status: %v", mdb.Status.Status)
 	res, err = status.Update(r.client.Status(), &mdb,
 		statusOptions().
 			withMongoURI(mdb.MongoURI()).
@@ -290,7 +291,6 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		r.log.Infow("Requeuing reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 		return res, nil
 	}
-	r.log.Info("\n\nbuilding nodes................\n\n")
 	r.log.Infow("Successfully finished reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 	return res, err
 }

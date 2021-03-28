@@ -11,7 +11,7 @@ COPY go.mod go.sum ./
 RUN GOPROXY=https://goproxy.cn go mod download -x
 
 
-ADD ./scripts/dev/templates/Dockerfile.operator ./scripts/dev/templates/Dockerfile.operator
+ADD . .
 
 
 # build the binary
@@ -26,7 +26,7 @@ COPY build/bin/ build/bin/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager cmd/manager/main.go
 
 # build and second stage image if necessary
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+FROM centos:7
 
 ENV OPERATOR=manager \
     USER_UID=1001 \
@@ -39,6 +39,6 @@ COPY --from=builder /workspace/build/bin /usr/local/bin
 
 RUN  /usr/local/bin/user_setup
 
-USER ${USER_UID}
+USER root
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 

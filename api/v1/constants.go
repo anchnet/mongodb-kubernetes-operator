@@ -19,3 +19,6 @@ const (
 	MongoDBRolePRIMARY   = "primary"
 	MongoDBRoleSECONDARY = "secondary"
 )
+const (
+	MongoDBCommandIsMaster = "isMaster"
+)

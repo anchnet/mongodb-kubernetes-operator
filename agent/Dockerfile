@@ -20,7 +20,7 @@ RUN mkdir -p agent \
     && rm agent/mongodb-agent.tar.gz \
     && rm -r mongodb-mms-automation-agent-*
 
-RUN mkdir -p /var/lib/mongodb-mms-automation \
+RUN mkdir -p /var/lib/mongodb-mms-automation /
     && mkdir -p /var/log/mongodb-mms-automation/ \
     && chmod -R +wr /var/log/mongodb-mms-automation/ \
     # ensure that the agent user can write the logs in OpenShift
