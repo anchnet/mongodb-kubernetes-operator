@@ -336,9 +336,9 @@ type AuthMode string
 
 // MongoDBCommunityStatus defines the observed state of MongoDB
 type MongoDBCommunityStatus struct {
-	Status   ClusterStatus `json:"status"`
-	MongoURI string        `json:"mongoUri"`
-	Phase    Phase         `json:"phase"`
+	Status   MongoDBCommunityClusterStatus `json:"status"`
+	MongoURI string                        `json:"mongoUri"`
+	Phase    Phase                         `json:"phase"`
 
 	CurrentStatefulSetReplicas int `json:"currentStatefulSetReplicas"`
 	CurrentMongoDBMembers      int `json:"currentMongoDBMembers"`

@@ -41,12 +41,6 @@ func (m mongoClient) RunCommand(cmd string) (bson.M, error) {
 		return nil, err
 	}
 	return result, nil
-	//v, ok := result["ismaster"].(bool)
-	//if ok {
-	//	return v, nil
-	//} else {
-	//	return false, nil
-	//}
 }
 
 func (m mongoClient) Close() error {

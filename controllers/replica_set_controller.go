@@ -130,61 +130,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
 
-	var nodes []mdbv1.MongoDBCommunityNode
-	//nodes = append(nodes, mdbv1.MongoDBCommunityNode{IP: "10.224.3.3.4", PodName: "example-mongodb-0"})
-	labels := map[string]string{
-		"app": fmt.Sprintf("%v-svc", mdb.Name),
-	}
-	pods, err := r.statefulSetController.GetStatefulSetPodsByLabels(request.Namespace, labels)
-	if pods != nil && len(pods.Items) > 0 {
-		r.log.Infow("Found", "labels:", mdb.Name, "ns:", request.Namespace, "pods:", len(pods.Items))
-		var podSlice []*corev1.Pod
-		for _, pod := range pods.Items {
-			r.log.Info("Pod Running -----------")
-			podPointer := pod
-			podSlice = append(podSlice, &podPointer)
-			node := mdbv1.MongoDBCommunityNode{
-				ID:        string(pod.UID),
-				IP:        pod.Status.PodIP,
-				PodName:   pod.ObjectMeta.Name,
-				NodeName:  pod.Spec.NodeName,
-				Port:      mdbv1.DefaultMongoDBPort,
-				PodStatus: string(pod.Status.Phase),
-			}
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "mongod" {
-					for _, port := range container.Ports {
-						node.Port = port.ContainerPort
-					}
-				}
-			}
-			if node.IP != "" {
-				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
-				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
-				if err != nil {
-					r.log.Error("New mongodb client error,", err)
-					continue
-				}
-				r.log.Infof("Run command \"%v\" on %v", mdbv1.MongoDBCommandIsMaster, mongoHost)
-				response, err := client.RunCommand(mdbv1.MongoDBCommandIsMaster)
-				if err != nil {
-					r.log.Infof("Run command error, %v", err)
-					continue
-				}
-				if strings.HasPrefix(response["primary"].(string), pod.Name) {
-					node.Role = mdbv1.MongoDBClusterNodeRolePrimary
-				} else {
-					node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
-				}
-				err = client.Close()
-				if err != nil {
-					r.log.Error("Close mongodb client connection error,", err)
-					continue
-				}
-			}
-			nodes = append(nodes, node)
-		}
-	}
+	nodes := r.buildClusterNodes(mdb, err, request)
 
 	res, err := status.Update(r.client.Status(), &mdb, statusOptions().withNode(nodes))
 
@@ -268,7 +214,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 			withPendingPhase(10),
 		)
 	}
-	r.log.Infof("status.status: %v", mdb.Status.Status)
+	r.log.Infof("status.status: %v", mdb.Status.Phase)
 	res, err = status.Update(r.client.Status(), &mdb,
 		statusOptions().
 			withMongoURI(mdb.MongoURI()).
@@ -293,6 +239,65 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.log.Infow("Successfully finished reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 	return res, err
+}
+
+func (r ReplicaSetReconciler) buildClusterNodes(mdb mdbv1.MongoDBCommunity, err error, request reconcile.Request) []mdbv1.MongoDBCommunityNode {
+	var nodes []mdbv1.MongoDBCommunityNode
+	//nodes = append(nodes, mdbv1.MongoDBCommunityNode{IP: "10.224.3.3.4", PodName: "example-mongodb-0"})
+	labels := map[string]string{
+		"app": fmt.Sprintf("%v-svc", mdb.Name),
+	}
+	pods, err := r.statefulSetController.GetStatefulSetPodsByLabels(request.Namespace, labels)
+	if pods != nil && len(pods.Items) > 0 {
+		r.log.Infow("Found", "labels:", mdb.Name, "ns:", request.Namespace, "pods:", len(pods.Items))
+		var podSlice []*corev1.Pod
+		for _, pod := range pods.Items {
+			r.log.Info("Pod Running -----------")
+			podPointer := pod
+			podSlice = append(podSlice, &podPointer)
+			node := mdbv1.MongoDBCommunityNode{
+				ID:        string(pod.UID),
+				IP:        pod.Status.PodIP,
+				PodName:   pod.ObjectMeta.Name,
+				NodeName:  pod.Spec.NodeName,
+				Port:      mdbv1.DefaultMongoDBPort,
+				PodStatus: string(pod.Status.Phase),
+			}
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "mongod" {
+					for _, port := range container.Ports {
+						node.Port = port.ContainerPort
+					}
+				}
+			}
+			if node.IP != "" {
+				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
+				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
+				if err != nil {
+					r.log.Error("New mongodb client error,", err)
+					continue
+				}
+				r.log.Infof("Run command \"%v\" on %v", mdbv1.MongoDBCommandIsMaster, mongoHost)
+				response, err := client.RunCommand(mdbv1.MongoDBCommandIsMaster)
+				if err != nil {
+					r.log.Infof("Run command error, %v", err)
+				} else {
+					if strings.HasPrefix(response["primary"].(string), pod.Name) {
+						node.Role = mdbv1.MongoDBClusterNodeRolePrimary
+					} else {
+						node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
+					}
+				}
+				err = client.Close()
+				if err != nil {
+					r.log.Error("Close mongodb client connection error,", err)
+					continue
+				}
+			}
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
 }
 
 // ensureTLSResources creates any required TLS resources that the MongoDBCommunity

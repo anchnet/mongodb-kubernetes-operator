@@ -8,11 +8,11 @@ const (
 	MongoDBClusterNodeRoleNone      MongoDBCommunityRole = "None"
 )
 
-type ClusterStatus string
+type MongoDBCommunityClusterStatus string
 
 const (
-	ClusterStatusOK ClusterStatus = "Healthy"
-	ClusterStatusKO ClusterStatus = "Failed"
+	ClusterStatusOK MongoDBCommunityClusterStatus = "Healthy"
+	ClusterStatusKO MongoDBCommunityClusterStatus = "Failed"
 )
 const (
 	DefaultMongoDBPort   = 27017
