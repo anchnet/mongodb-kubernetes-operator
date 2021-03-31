@@ -130,7 +130,8 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
 
-	nodes := r.buildClusterNodes(mdb, err, request)
+	//nodes := r.buildClusterNodes(mdb, err, request)
+	var nodes []mdbv1.MongoDBCommunityNode
 
 	res, err := status.Update(r.client.Status(), &mdb, statusOptions().withNode(nodes))
 
@@ -245,7 +246,7 @@ func (r ReplicaSetReconciler) buildClusterNodes(mdb mdbv1.MongoDBCommunity, err 
 	var nodes []mdbv1.MongoDBCommunityNode
 	//nodes = append(nodes, mdbv1.MongoDBCommunityNode{IP: "10.224.3.3.4", PodName: "example-mongodb-0"})
 	labels := map[string]string{
-		"app": fmt.Sprintf("%v-svc", mdb.Name),
+		"app": mdb.ServiceName(),
 	}
 	pods, err := r.statefulSetController.GetStatefulSetPodsByLabels(request.Namespace, labels)
 	if pods != nil && len(pods.Items) > 0 {
@@ -453,7 +454,12 @@ func (r *ReplicaSetReconciler) createOrUpdateStatefulSet(mdb mdbv1.MongoDBCommun
 	if err != nil {
 		return errors.Errorf("error getting StatefulSet: %s", err)
 	}
-	buildStatefulSetModificationFunction(mdb)(&set)
+	passkey := mdb.GetMongoDBUser().PasswordSecretRef.Name
+	secrets, err := r.client.GetSecret(types.NamespacedName{mdb.Namespace, passkey})
+	if err != nil {
+		return errors.Errorf("error getting secret: %s", err)
+	}
+	buildStatefulSetModificationFunction(mdb, secrets)(&set)
 	if _, err = statefulset.CreateOrUpdate(r.client, set); err != nil {
 		return errors.Errorf("error creating/updating StatefulSet: %s", err)
 	}
@@ -638,22 +644,14 @@ func getUpdateStrategyType(mdb mdbv1.MongoDBCommunity) appsv1.StatefulSetUpdateS
 	return appsv1.OnDeleteStatefulSetStrategyType
 }
 
-// buildStatefulSet takes a MongoDB resource and converts it into
-// the corresponding stateful set
-func buildStatefulSet(mdb mdbv1.MongoDBCommunity) (appsv1.StatefulSet, error) {
-	sts := appsv1.StatefulSet{}
-	buildStatefulSetModificationFunction(mdb)(&sts)
-	return sts, nil
-}
-
 // isChangingVersion returns true if an attempted version change is occurring.
 func isChangingVersion(mdb mdbv1.MongoDBCommunity) bool {
 	prevSpec := getPreviousSpec(mdb)
 	return prevSpec.Version != "" && prevSpec.Version != mdb.Spec.Version
 }
 
-func buildStatefulSetModificationFunction(mdb mdbv1.MongoDBCommunity) statefulset.Modification {
-	commonModification := construct.BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb)
+func buildStatefulSetModificationFunction(mdb mdbv1.MongoDBCommunity, secrets corev1.Secret) statefulset.Modification {
+	commonModification := construct.BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb, secrets)
 	return statefulset.Apply(
 		commonModification,
 		statefulset.WithOwnerReference([]metav1.OwnerReference{getOwnerReference(mdb)}),

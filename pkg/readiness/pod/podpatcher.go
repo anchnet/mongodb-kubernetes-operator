@@ -3,6 +3,7 @@ package pod
 import (
 	"context"
 	"encoding/json"
+	"go.uber.org/zap"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +27,7 @@ func NewKubernetesPodPatcher(clientSet kubernetes.Interface) Patcher {
 
 func (p Patcher) patchPod(namespace, podName string, payload []patchValue) (*v1.Pod, error) {
 	data, err := json.Marshal(payload)
+	zap.S().Infof("data: %v", string(data))
 	if err != nil {
 		return nil, err
 	}

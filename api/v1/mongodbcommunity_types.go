@@ -508,6 +508,13 @@ func (m *MongoDBCommunity) StatefulSetReplicasThisReconciliation() int {
 	return scale.ReplicasThisReconciliation(m)
 }
 
+func (m *MongoDBCommunity) GetMongoDBUser() MongoDBUser {
+	if len(m.Spec.Users) > 0 {
+		return m.Spec.Users[0]
+	}
+	return MongoDBUser{}
+}
+
 type automationConfigReplicasScaler struct {
 	current, desired int
 }

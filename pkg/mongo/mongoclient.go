@@ -20,7 +20,7 @@ type mongoClient struct {
 
 func NewMongoClient(addr string) (IMongoClient, error) {
 	mc := &mongoClient{}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(addr))
 	if err != nil {
@@ -34,7 +34,7 @@ func NewMongoClient(addr string) (IMongoClient, error) {
 func (m mongoClient) RunCommand(cmd string) (bson.M, error) {
 	var db *mongo.Database
 	db = m.client.Database("admin")
-	command := bson.E{"isMaster", true}
+	command := bson.D{{"isMaster", true}}
 	opts := options.RunCmd()
 	var result bson.M
 	if err := db.RunCommand(context.TODO(), command, opts).Decode(&result); err != nil {

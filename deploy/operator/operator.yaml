@@ -16,7 +16,7 @@ spec:
       serviceAccountName: mongodb-kubernetes-operator
       containers:
         - name: mongodb-kubernetes-operator
-          image: hub.51idc.com/operators/mongodb-kubernetes-operator:0.5.2-migu-prerelease
+          image: hub.51idc.com/operators/mongodb-kubernetes-operator:0.5.2-migu-snapshot
           command:
             - /usr/local/bin/entrypoint
           imagePullPolicy: Always
@@ -41,3 +41,5 @@ spec:
               value: "library/mongo"
             - name: MONGODB_REPO_URL
               value: "registry.hub.docker.com"
+            - name: MONGODB_EXPORTER_IMAGE
+              value: hub.51idc.com/operators/mongodb-exporter:v0.20.1
