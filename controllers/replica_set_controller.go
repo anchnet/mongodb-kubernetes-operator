@@ -130,8 +130,8 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
 
-	//nodes := r.buildClusterNodes(mdb, err, request)
-	var nodes []mdbv1.MongoDBCommunityNode
+	nodes := r.buildClusterNodes(mdb, err, request)
+	//var nodes []mdbv1.MongoDBCommunityNode
 
 	res, err := status.Update(r.client.Status(), &mdb, statusOptions().withNode(nodes))
 
