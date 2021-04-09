@@ -2,6 +2,7 @@ package construct
 
 import (
 	"fmt"
+	v1 "github.com/mongodb/mongodb-kubernetes-operator/api/v1"
 	"os"
 	"strings"
 
@@ -21,9 +22,11 @@ import (
 )
 
 const (
-	AgentName   = "mongodb-agent"
-	MongodbName = "mongod"
+	AgentName    = "mongodb-agent"
+	MongodbName  = "mongod"
+	ExporterName = "mongodb-exporter"
 
+	ExporterImageEnv               = "MONGODB_EXPORTER_IMAGE"
 	versionUpgradeHookName         = "mongod-posthook"
 	readinessProbeContainerName    = "mongodb-agent-readinessprobe"
 	dataVolumeName                 = "data-volume"
@@ -33,6 +36,8 @@ const (
 	clusterFilePath                = "/var/lib/automation/config/cluster-config.json"
 	operatorServiceAccountName     = "mongodb-kubernetes-operator"
 	agentHealthStatusFilePathValue = "/var/log/mongodb-mms-automation/healthstatus/agent-health-status.json"
+
+	readinessProbeImageEnv = "READINESS_PROBE_IMAGE"
 
 	MongodbRepoUrl = "MONGODB_REPO_URL"
 
@@ -47,6 +52,7 @@ const (
 	MongodbImageEnv            = "MONGODB_IMAGE"
 	VersionUpgradeHookImageEnv = "VERSION_UPGRADE_HOOK_IMAGE"
 	ReadinessProbeImageEnv     = "READINESS_PROBE_IMAGE"
+	MongoDBExporterImageEnv    = "MONGODB_EXPORTER_IMAGE"
 	ManagedSecurityContextEnv  = "MANAGED_SECURITY_CONTEXT"
 )
 
@@ -75,7 +81,7 @@ type MongoDBStatefulSetOwner interface {
 // BuildMongoDBReplicaSetStatefulSetModificationFunction builds the parts of the replica set that are common between every resource that implements
 // MongoDBStatefulSetOwner.
 // It doesn't configure TLS or additional containers/env vars that the statefulset might need.
-func BuildMongoDBReplicaSetStatefulSetModificationFunction(mdb MongoDBStatefulSetOwner, scaler scale.ReplicaSetScaler) statefulset.Modification {
+func BuildMongoDBReplicaSetStatefulSetModificationFunction(mdb *v1.MongoDBCommunity, scaler scale.ReplicaSetScaler, secrets corev1.Secret) statefulset.Modification {
 	labels := map[string]string{
 		"app": mdb.ServiceName(),
 	}
@@ -317,5 +323,23 @@ exec mongod -f %s;
 		container.WithVolumeMounts(volumeMounts),
 
 		securityContext,
+	)
+}
+
+func mongodbExporterContainer(user v1.MongoDBUser, pass string) container.Modification {
+	mongoDbExporterCommand := []string{
+		"/bin/sh",
+		"-c",
+		fmt.Sprintf("/mongodb_exporter --mongodb.uri=mongodb://%s:%s@127.0.0.1/%s", user.Name, pass, user.DB),
+	}
+	var ports []corev1.ContainerPort
+	return container.Apply(
+		container.WithName(ExporterName),
+		container.WithImage(os.Getenv(ExporterImageEnv)),
+		container.WithImagePullPolicy(corev1.PullAlways),
+		container.WithResourceRequirements(resourcerequirements.Defaults()),
+		container.WithCommand(mongoDbExporterCommand),
+		container.WithImagePullPolicy(corev1.PullAlways),
+		container.WithPorts(append(ports, corev1.ContainerPort{ContainerPort: 9216})),
 	)
 }

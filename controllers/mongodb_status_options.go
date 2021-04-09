@@ -138,6 +138,11 @@ func (o *optionBuilder) withRunningPhase() *optionBuilder {
 	return o.withPhase(mdbv1.Running, -1)
 }
 
+func (o *optionBuilder) withNode(nodes []mdbv1.MongoDBCommunityNode) *optionBuilder {
+	o.options = append(o.options, mongoDBCommunityNodeOption{nodes: nodes})
+	return o
+}
+
 type phaseOption struct {
 	phase      mdbv1.Phase
 	retryAfter int
@@ -181,5 +186,17 @@ func (s statefulSetReplicasOption) ApplyOption(mdb *mdbv1.MongoDBCommunity) {
 }
 
 func (s statefulSetReplicasOption) GetResult() (reconcile.Result, error) {
+	return result.OK()
+}
+
+type mongoDBCommunityNodeOption struct {
+	nodes []mdbv1.MongoDBCommunityNode
+}
+
+func (s mongoDBCommunityNodeOption) ApplyOption(mdb *mdbv1.MongoDBCommunity) {
+	mdb.Status.Nodes = s.nodes
+}
+
+func (s mongoDBCommunityNodeOption) GetResult() (reconcile.Result, error) {
 	return result.OK()
 }

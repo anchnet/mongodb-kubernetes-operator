@@ -57,13 +57,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !hasRequiredVariables(log, construct.AgentImageEnv, construct.VersionUpgradeHookImageEnv, construct.ReadinessProbeImageEnv) {
+	if !hasRequiredVariables(log, construct.AgentImageEnv, construct.VersionUpgradeHookImageEnv, construct.ReadinessProbeImageEnv, construct.MongoDBExporterImageEnv) {
 		os.Exit(1)
 	}
 
 	// Get watch namespace from environment variable.
 	namespace, nsSpecified := os.LookupEnv(WatchNamespaceEnv)
 	if !nsSpecified {
+		log.Info(fmt.Sprintf("Namespace specified: %v\n", nsSpecified))
 		os.Exit(1)
 	}
 

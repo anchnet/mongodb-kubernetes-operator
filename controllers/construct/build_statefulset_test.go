@@ -40,7 +40,7 @@ func TestMultipleCalls_DoNotCauseSideEffects(t *testing.T) {
 	_ = os.Setenv(AgentImageEnv, "agent-image")
 
 	mdb := newTestReplicaSet()
-	stsFunc := BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb)
+	stsFunc := BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb, corev1.Secret{})
 	sts := &appsv1.StatefulSet{}
 
 	t.Run("1st Call", func(t *testing.T) {

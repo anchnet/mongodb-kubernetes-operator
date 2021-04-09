@@ -57,6 +57,12 @@ spec:
               description: FeatureCompatibilityVersion configures the feature compatibility
                 version that will be set for the deployment
               type: string
+            image:
+              type: string
+            imagePullPolicy:
+              description: PullPolicy describes a policy for if/when to pull a container
+                image
+              type: string
             members:
               description: Members is the number of members in the replica set
               type: integer
@@ -307,13 +313,38 @@ spec:
               type: string
             mongoUri:
               type: string
+            nodes:
+              items:
+                properties:
+                  id:
+                    type: string
+                  ip:
+                    type: string
+                  nodeName:
+                    type: string
+                  podName:
+                    type: string
+                  podStatus:
+                    type: string
+                  port:
+                    format: int32
+                    type: integer
+                  role:
+                    type: string
+                required:
+                  - podStatus
+                type: object
+              type: array
             phase:
               type: string
+            status:
+              type: string
           required:
-          - currentMongoDBMembers
+            - currentMongoDBMembers
           - currentStatefulSetReplicas
           - mongoUri
           - phase
+            - status
           type: object
       type: object
   version: v1

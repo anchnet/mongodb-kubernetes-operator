@@ -219,6 +219,6 @@ func main() {
 	}
 	logger = log.Sugar()
 	if !isPodReady(config) {
-		os.Exit(1)
+		os.Exit(0)
 	}
 }

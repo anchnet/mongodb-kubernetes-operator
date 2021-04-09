@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mongodb/mongodb-kubernetes-operator/pkg/mongo"
+	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/mongodb/mongodb-kubernetes-operator/pkg/util/functions"
 
@@ -67,10 +71,11 @@ func NewReconciler(mgr manager.Manager) *ReplicaSetReconciler {
 	secretWatcher := watch.New()
 
 	return &ReplicaSetReconciler{
-		client:        kubernetesClient.NewClient(mgrClient),
-		scheme:        mgr.GetScheme(),
-		log:           zap.S(),
-		secretWatcher: &secretWatcher,
+		client:                kubernetesClient.NewClient(mgrClient),
+		scheme:                mgr.GetScheme(),
+		log:                   zap.S(),
+		secretWatcher:         &secretWatcher,
+		statefulSetController: util.NewStatefulSetController(mgrClient),
 	}
 }
 
@@ -85,10 +90,11 @@ func (r *ReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type ReplicaSetReconciler struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        kubernetesClient.Client
-	scheme        *runtime.Scheme
-	log           *zap.SugaredLogger
-	secretWatcher *watch.ResourceWatcher
+	client                kubernetesClient.Client
+	scheme                *runtime.Scheme
+	log                   *zap.SugaredLogger
+	secretWatcher         *watch.ResourceWatcher
+	statefulSetController util.IStatefulSetControl
 }
 
 // +kubebuilder:rbac:groups=mongodbcommunity.mongodb.com,resources=mongodbcommunity,verbs=get;list;watch;create;update;patch;delete
@@ -103,7 +109,7 @@ type ReplicaSetReconciler struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-
+	defer r.log.Info("======================================================================")
 	// TODO: generalize preparation for resource
 	// Fetch the MongoDB instance
 	mdb := mdbv1.MongoDBCommunity{}
@@ -119,9 +125,13 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		// Error reading the object - requeue the request.
 		return result.Failed()
 	}
-
 	r.log = zap.S().With("ReplicaSet", request.NamespacedName)
 	r.log.Infow("Reconciling MongoDB", "MongoDB.Spec", mdb.Spec, "MongoDB.Status", mdb.Status)
+
+	//nodes := r.buildClusterNodes(mdb, err, request)
+	var nodes []mdbv1.MongoDBCommunityNode
+
+	res, err := status.Update(r.client.Status(), &mdb, statusOptions().withNode(nodes))
 
 	r.log.Debug("Validating MongoDB.Spec")
 	if err := r.validateUpdate(mdb); err != nil {
@@ -167,6 +177,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	ready, err := r.deployMongoDBReplicaSet(mdb)
+	r.log.Info("Deploy mongodb ready: ", ready)
 	if err != nil {
 		return status.Update(r.client.Status(), &mdb,
 			statusOptions().
@@ -176,11 +187,12 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if !ready {
-		return status.Update(r.client.Status(), &mdb,
+		res, err = status.Update(r.client.Status(), &mdb,
 			statusOptions().
 				withMessage(Info, "ReplicaSet is not yet ready, retrying in 10 seconds").
 				withPendingPhase(10),
 		)
+		return res, err
 	}
 
 	r.log.Debug("Resetting StatefulSet UpdateStrategy to RollingUpdate")
@@ -201,8 +213,8 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 			withPendingPhase(10),
 		)
 	}
-
-	res, err := status.Update(r.client.Status(), &mdb,
+	r.log.Infof("status.status: %v", mdb.Status.Phase)
+	res, err = status.Update(r.client.Status(), &mdb,
 		statusOptions().
 			withMongoURI(mdb.MongoURI()).
 			withMongoDBMembers(mdb.AutomationConfigMembersThisReconciliation()).
@@ -210,6 +222,7 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 			withMessage(None, "").
 			withRunningPhase(),
 	)
+
 	if err != nil {
 		r.log.Errorf("Error updating the status of the MongoDB resource: %s", err)
 		return res, err
@@ -228,7 +241,6 @@ func (r ReplicaSetReconciler) Reconcile(ctx context.Context, request reconcile.R
 		r.log.Infow("Requeuing reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 		return res, nil
 	}
-
 	r.log.Infow("Successfully finished reconciliation", "MongoDB.Spec:", mdb.Spec, "MongoDB.Status:", mdb.Status)
 	return res, err
 }
@@ -244,6 +256,65 @@ func (r *ReplicaSetReconciler) updateLastSuccessfulConfiguration(mdb mdbv1.Mongo
 		lastSuccessfulConfiguration: string(currentSpec),
 	}
 	return annotations.SetAnnotations(&mdb, specAnnotations, r.client)
+}
+
+func (r ReplicaSetReconciler) buildClusterNodes(mdb mdbv1.MongoDBCommunity, err error, request reconcile.Request) []mdbv1.MongoDBCommunityNode {
+	var nodes []mdbv1.MongoDBCommunityNode
+	//nodes = append(nodes, mdbv1.MongoDBCommunityNode{IP: "10.224.3.3.4", PodName: "example-mongodb-0"})
+	labels := map[string]string{
+		"app": mdb.ServiceName(),
+	}
+	pods, err := r.statefulSetController.GetStatefulSetPodsByLabels(request.Namespace, labels)
+	if pods != nil && len(pods.Items) > 0 {
+		r.log.Infow("Found", "labels:", mdb.Name, "ns:", request.Namespace, "pods:", len(pods.Items))
+		var podSlice []*corev1.Pod
+		for _, pod := range pods.Items {
+			r.log.Info("Pod Running -----------")
+			podPointer := pod
+			podSlice = append(podSlice, &podPointer)
+			node := mdbv1.MongoDBCommunityNode{
+				ID:        string(pod.UID),
+				IP:        pod.Status.PodIP,
+				PodName:   pod.ObjectMeta.Name,
+				NodeName:  pod.Spec.NodeName,
+				Port:      mdbv1.DefaultMongoDBPort,
+				PodStatus: string(pod.Status.Phase),
+			}
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "mongod" {
+					for _, port := range container.Ports {
+						node.Port = port.ContainerPort
+					}
+				}
+			}
+			if node.IP != "" {
+				mongoHost := fmt.Sprintf("%v:%v", node.IP, node.Port)
+				client, err := mongo.NewMongoClient(fmt.Sprintf("mongodb://%v", mongoHost))
+				if err != nil {
+					r.log.Error("New mongodb client error,", err)
+					continue
+				}
+				r.log.Infof("Run command \"%v\" on %v", mdbv1.MongoDBCommandIsMaster, mongoHost)
+				response, err := client.RunCommand(mdbv1.MongoDBCommandIsMaster)
+				if err != nil {
+					r.log.Infof("Run command error, %v", err)
+				} else {
+					if strings.HasPrefix(response["primary"].(string), pod.Name) {
+						node.Role = mdbv1.MongoDBClusterNodeRolePrimary
+					} else {
+						node.Role = mdbv1.MongoDBClusterNodeRoleSecondary
+					}
+				}
+				err = client.Close()
+				if err != nil {
+					r.log.Error("Close mongodb client connection error,", err)
+					continue
+				}
+			}
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
 }
 
 // ensureTLSResources creates any required TLS resources that the MongoDBCommunity
@@ -270,7 +341,8 @@ func (r *ReplicaSetReconciler) deployStatefulSet(mdb mdbv1.MongoDBCommunity) (bo
 	if err := r.createOrUpdateStatefulSet(mdb); err != nil {
 		return false, errors.Errorf("error creating/updating StatefulSet: %s", err)
 	}
-
+	r.log.Info("Waiting 1 second for statefulset creating...")
+	time.Sleep(1 * time.Second)
 	currentSts, err := r.client.GetStatefulSet(mdb.NamespacedName())
 	if err != nil {
 		return false, errors.Errorf("error getting StatefulSet: %s", err)
@@ -385,7 +457,12 @@ func (r *ReplicaSetReconciler) createOrUpdateStatefulSet(mdb mdbv1.MongoDBCommun
 	if err != nil {
 		return errors.Errorf("error getting StatefulSet: %s", err)
 	}
-	buildStatefulSetModificationFunction(mdb)(&set)
+	passkey := mdb.GetMongoDBUser().PasswordSecretRef.Name
+	secrets, err := r.client.GetSecret(types.NamespacedName{mdb.Namespace, passkey})
+	if err != nil {
+		return errors.Errorf("error getting secret: %s", err)
+	}
+	buildStatefulSetModificationFunction(mdb, secrets)(&set)
 	if _, err = statefulset.CreateOrUpdate(r.client, set); err != nil {
 		return errors.Errorf("error creating/updating StatefulSet: %s", err)
 	}
@@ -524,12 +601,12 @@ func getMongodConfigModification(mdb mdbv1.MongoDBCommunity) automationconfig.Mo
 // the corresponding stateful set
 func buildStatefulSet(mdb mdbv1.MongoDBCommunity) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
-	buildStatefulSetModificationFunction(mdb)(&sts)
+	buildStatefulSetModificationFunction(mdb, corev1.Secret{})(&sts)
 	return sts, nil
 }
 
-func buildStatefulSetModificationFunction(mdb mdbv1.MongoDBCommunity) statefulset.Modification {
-	commonModification := construct.BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb)
+func buildStatefulSetModificationFunction(mdb mdbv1.MongoDBCommunity, secrets corev1.Secret) statefulset.Modification {
+	commonModification := construct.BuildMongoDBReplicaSetStatefulSetModificationFunction(&mdb, mdb, secrets)
 	return statefulset.Apply(
 		commonModification,
 		statefulset.WithOwnerReference([]metav1.OwnerReference{getOwnerReference(mdb)}),

@@ -62,8 +62,10 @@ func ReachedGoalState(pod corev1.Pod, targetConfigVersion int, log *zap.SugaredL
 		return false
 	}
 	if cast.ToInt(currentAgentVersion) != targetConfigVersion {
-		log.Debugf("The Agent in the Pod '%s' hasn't reached the goal state yet (goal: %d, agent: %s)", pod.Name, targetConfigVersion, currentAgentVersion)
-		return false
+		log.Debugf("The agent in the Pod '%s' hasn't reached the goal state yet (goal: %d, agent: %s)", pod.Name, targetConfigVersion, currentAgentVersion)
+		//return false
+		//todo 暂时去掉 agent version的检查
+		return true
 	}
 	return true
 }
