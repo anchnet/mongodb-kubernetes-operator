@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	AgentName    = "mongodb-agent"
-	MongodbName  = "mongod"
-	ExporterName = "mongodb-exporter"
+	AgentName           = "mongodb-agent"
+	MongodbName         = "mongod"
+	MongodbExporterName = "mongodb-exporter"
 
 	ExporterImageEnv               = "MONGODB_EXPORTER_IMAGE"
 	versionUpgradeHookName         = "mongod-posthook"
@@ -162,6 +162,7 @@ func BuildMongoDBReplicaSetStatefulSetModificationFunction(mdb *v1.MongoDBCommun
 				podtemplatespec.WithServiceAccount(operatorServiceAccountName),
 				podtemplatespec.WithContainer(AgentName, mongodbAgentContainer(mdb.AutomationConfigSecretName(), mongodbAgentVolumeMounts)),
 				podtemplatespec.WithContainer(MongodbName, mongodbContainer(mdb.GetMongoDBVersion(), mongodVolumeMounts)),
+				podtemplatespec.WithContainer(MongodbExporterName, mongodbExporterContainer(mdb.GetMongoDBUser(), string(secrets.Data["password"]))),
 				podtemplatespec.WithInitContainer(versionUpgradeHookName, versionUpgradeHookInit([]corev1.VolumeMount{hooksVolumeMount})),
 				podtemplatespec.WithInitContainer(readinessProbeContainerName, readinessProbeInit([]corev1.VolumeMount{scriptsVolumeMount})),
 			),
@@ -334,7 +335,7 @@ func mongodbExporterContainer(user v1.MongoDBUser, pass string) container.Modifi
 	}
 	var ports []corev1.ContainerPort
 	return container.Apply(
-		container.WithName(ExporterName),
+		container.WithName(MongodbExporterName),
 		container.WithImage(os.Getenv(ExporterImageEnv)),
 		container.WithImagePullPolicy(corev1.PullAlways),
 		container.WithResourceRequirements(resourcerequirements.Defaults()),
